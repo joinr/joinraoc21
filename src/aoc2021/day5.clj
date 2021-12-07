@@ -49,7 +49,7 @@
   (let [[[x ly1] [_ ly2]] l
         [[_ ry1] [_ ry2]] r]
     (if (> ly1 ry1)  (recur r l)
-        (when-not (<= ly2 ry1) ;;----- [    ]
+        (when-not (< ly2 ry1) ;;----- [    ]
           (let [left-overlap  (and (<= ry1 ly2) (>= ry1 ly1)) ;;---[----
                 right-overlap (and (<= ry2 ly2) (>= ry2 ly1))] ;;-----]--
             (cond
@@ -146,5 +146,14 @@
                                  :intersections (merge-with clojure.set/union intersections added-intersections)
                                  :x x0))
                      (rest segs)))))
-          acc))))
+        ;;no more segments, try to drain the pending!
+        (if-let [xnew (some-> pending keys first inc)]
+          (recur (log (drop-segments  (assoc acc :x xnew))) segs)
+          acc)))))
 
+;;(vsect [[0 9] [5 9]] [[0 9] [2 9]])
+;;wrong
+;;aoc2021.day5>  (vsect [[0 9] [5 9]] [[0 9] [2 9]])
+;;[[0 9] [2 9]]
+;;aoc2021.day5>  (hsect [[0 9] [5 9]] [[0 9] [2 9]])
+;;[[0 9] [2 9]]
