@@ -1,5 +1,6 @@
 (ns aoc2021.day5
-  (:require [clojure.java.io :as io]))
+  (:require [clojure.java.io :as io]
+            [aoc2021.util :as u]))
 
 (def sample
   "0,9 -> 5,9
@@ -255,15 +256,9 @@
 ;;no longer intersect from the set.
 ;;keep track of intersecting point density.
 
-(def ^:dynamic *logging* nil)
-(defn log [x]
-  (when *logging*
-    (println x))
-  x)
-
 (defn drop-segments [{:keys [actives pending intersections history] :as acc}]
   (let [[k removals]      (first pending)
-        _ (log [:dropping-segments k removals])
+        _ (u/log [:dropping-segments k removals])
         new-actives       (reduce dissoc actives removals)
         new-pending       (dissoc pending k)
         new-intersections (reduce-kv (fn [acc point xs]
@@ -308,13 +303,13 @@
       ;;next segment causes us to advance if it is > xprev, or > min of pending.
       (if-let [[l r :as seg] (first segs)]
         (let [[x0 _] l
-              _ (log seg)]
+              _ (u/log seg)]
           (if (some-> pending keys first (< x0))
-            (recur (log (drop-segments  (assoc acc :x x0))) segs)
+            (recur (u/log (drop-segments  (assoc acc :x x0))) segs)
             (let [[x1 _]    r ;;terminus
                   xchanged?           (not= x0 xprev)
                   no-prior-history?   (not= (some-> history peek :x) xprev)
-                  _ (log [xchanged? no-prior-history? xprev x0])
+                  _ (u/log [xchanged? no-prior-history? xprev x0])
                   new-history (when (and xchanged? no-prior-history?)
                                 (conj history {:x xprev :intersections intersections :actives actives}))
                   ;;label and add line.
@@ -327,14 +322,14 @@
                                                      (update acc res #(conj (or % #{id}) k))
                                                      acc)) {} actives)
                   actives (assoc actives id seg)]
-              (recur (log (assoc acc :actives actives :pending pending
+              (recur (u/log (assoc acc :actives actives :pending pending
                                  :intersections (merge-with clojure.set/union intersections added-intersections)
                                  :x x0
                                  :xprev x
                                  :history (or new-history history))) (rest segs)))))
         ;;no more segments, try to drain the pending!
         (if-let [xnew (some-> pending keys first inc)]
-          (recur (log (drop-segments  (assoc acc :x xnew))) segs)
+          (recur (u/log (drop-segments  (assoc acc :x xnew))) segs)
           (acc :history))))))
 
 

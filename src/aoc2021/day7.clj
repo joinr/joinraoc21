@@ -1,5 +1,6 @@
 (ns aoc2021.day7
-  (:require [clojure.java.io :as io]))
+  (:require [clojure.java.io :as io]
+            [aoc2021.util :as u]))
 
 (def sample [16,1,2,0,4,2,7,1,2,14])
 
@@ -8,26 +9,6 @@
         (map (fn [x]
                (Math/abs (- x pos))))
         (reduce +)))
-
-;;dumbest idea is to binary search.
-;;only works if we have a global optimum.
-
-;;assume picking a position larger than all the others
-;;provides an upper bound, since all deviations will be
-;;positive.
-
-;;looks like this forms a parabola, with the global minimum being the
-;;average of the weights.  Obviously this is in continuous space,
-;;we have to operate in integer space.
-
-;;We can probably leverage the continuous relaxation to
-;;get a good initial guess.  Then maybe search from there.
-
-(defn init-guess [xs]
-  (Math/round
-   (/ (reduce + xs)
-      10.0)))
-
 
 ;;our goal is pretty simple.
 ;;I think we assume that this is a parabola, even the integer constrained one.
@@ -50,8 +31,8 @@
 ;;can update our bounds based on the new information.
 
 ;;so we maintain some state
-{:left-bound  [slope intercept]
- :right-bound [slope intercept]}
+;;{:left-bound  [slope intercept]
+;; :right-bound [slope intercept]}
 
 ;;given the bounds we can compute an intersection and a guess.
 ;;we compute the intersection and sample it.
@@ -92,10 +73,6 @@
         b (- y1 (* m x1))]
     [m b]))
 
-;;given a sample, update the bounds.
-(defn update-bounds [l r position m]
-  )
-
 ;;given bounds, estimate a point based on the
 ;;intersection of 2 lines.
 (defn estimate-point [[l r]]
@@ -105,31 +82,132 @@
 ;;given a point, generate a result, either
 ;;a {:saddle pt}, {:left [m b]}, {:right [m b]}
 (defn sample-point [f x]
-  (let [l (dec x)
-        m x
-        r (inc x)
+  (let [l  (dec x)
+        m  x
+        r  (inc x)
         fl (f l)
         fm (f m)
         fr (f r)
         position (saddle-class fl fm fr)
-        _ (println [[l fl] [m fm] [r fr] position])]
+        _ (u/log [[l fl] [m fm] [r fr] position])]
     (case  position
-      :saddle {:saddle [x fm]}
-      :left   {:left  (compute-line m fm r fr)}
-      :right  {:right (compute-line l fl m fm)})))
+      :saddle [:saddle [x fm]]
+      :left   [:left  (compute-line m fm r fr)]
+      :right  [:right (compute-line l fl m fm)])))
 
 ;;need an initial guess on left bound and right bound.
 ;;assume we have initial bounds.
-#_
-(defn saddle-step [f xl xr]
-  (let [left-bound  (sample-point f xl)
-        right-bound (sample-point f xr)]
-    (if-let [saddle (or (left-bound :saddle) (right-bound :saddle))]
-      saddle ;;done
-      ;;it's possible either bound overshoots. what then?
-      
+
+;;we estim ate a point.
+;;that point is either left/saddle/right.
+;;based on the point, we update our bounds.
+;;if left, we have new left bounds.
+;;if right, we have new right bounds.
+(defn saddle-step [f l r]
+  (let [[x0 _]       (intersect    l r) ;;our projected guess
+        x         (Math/round x0)
+        _ (u/log [:guessing x])
+        [type res]  (sample-point f x)] ;;either left, saddle, right.
+    (case type
+      :saddle {:saddle res} ;;found saddle point, done.
+      :left   {:new-bounds [res r]} ;;update left bounds
+      :right  {:new-bounds [l res]};;update right bounds
       )))
 
+(defn saddle-search [f xl xr]
+  (let [[typel l] (sample-point f xl)
+        [typer r] (sample-point f xr)]
+    (cond (= typel :saddle) l ;;done
+          (= typer :saddle) r ;;done
+          :else ;;go search
+          (do (assert (and (= typel :left) (= typer :right))
+                      "expected initial xl, xr to define bounds!")
+              (->> (iterate (fn [{:keys [l r] :as state}]
+                         (let [res (saddle-step f l r)]
+                           (if (res :saddle) ;;done
+                             (assoc state :saddle (res :saddle))
+                             (let [[l r] (res :new-bounds)]
+                               {:l l :r r}))))
+                            {:l l :r r})
+                   (drop-while #(not (% :saddle)))
+                   first)))))
 
+(defn bounds [xs]
+  (reduce (fn [[xmin xmax] x]
+            [(min xmin x) (max xmax x)])
+          [Long/MAX_VALUE Long/MIN_VALUE] xs))
 
-;;can hill climb.
+;;10x faster for this data than exhaustive.
+(defn solve [xs & {:keys [f] :or {f score}}]
+  (let [[xmin xmax] (bounds xs)
+        score-fn    (u/memo-1 #(f xs %))]
+    (-> (saddle-search score-fn xmin xmax)
+        :saddle)))
+
+;;exhaustive check
+(defn exhaustive [xs & {:keys [f] :or {f score}}]
+  (let [[xmin xmax] (bounds xs)
+        score-fn    #(f xs %)]
+    (reduce (fn [[x0 y] n]
+              (let [res (score-fn n)]
+                (if (< res y) ;;new min
+                  [n res]
+                  (reduced [x0 y]))))
+            [(dec xmin) (score-fn (dec xmin))] ;;increases not allowed!
+            (range xmin (inc xmax)))))
+
+;;solve day 7.1
+(->> (io/resource "day7input.txt")
+     slurp
+     u/brackets
+     clojure.edn/read-string
+     solve
+     second)
+
+;;solve 7.2
+
+#_
+(defn naive-cost [n]
+  (reduce + (take n (range 1 (inc n)))))
+
+#_
+(def costs
+  (let [n   100
+        acc (long-array (range 100))]
+    (loop [idx 0
+           sum 0]
+      (when (< idx n)
+        (let [nidx    (unchecked-inc idx)
+              next-sum (+ sum idx)]
+          (aset acc idx next-sum)
+          (recur nidx next-sum))))
+    acc))
+
+;;we can cache these.  can we compute?
+
+(defn gauss-cost [n]
+  (/ (* n (inc n)) 2))
+
+(defn new-score [xs pos]
+  (->> xs
+       (map (fn [x]
+              (gauss-cost (Math/abs (- x pos)))))
+       (reduce +)))
+
+;;our response is still parabolic, so assumptions hold.
+
+(-> (io/resource "day7input.txt")
+     slurp
+     u/brackets
+     clojure.edn/read-string
+     (solve :f new-score)
+     second)
+
+;;same 
+#_
+(-> (io/resource "day7input.txt")
+    slurp
+    u/brackets
+    clojure.edn/read-string
+    (exhaustive :f new-score)
+    second)

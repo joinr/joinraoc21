@@ -1,5 +1,6 @@
 (ns aoc2021.day6
-  (:require [clojure.java.io :as io]))
+  (:require [clojure.java.io :as io]
+            [aoc2021.util :as u]))
 
 (def sample [3,4,3,1,2])
 (def +reset+ 6)
@@ -111,13 +112,11 @@
 (defn input->cycle [xs]
   (->cycle 0 6 (fish-counts xs)))
 
-(defn brackets [s]
-  (str "[" s "]"))
 
 ;;solution 6.1
 (-> (->> (io/resource "day6input.txt")
          slurp
-         brackets
+         u/brackets
          clojure.edn/read-string
          input->cycle)
     (fish-count 80))
