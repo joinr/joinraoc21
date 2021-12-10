@@ -126,7 +126,7 @@
 ;;solution 6.2
 (-> (->> (io/resource "day6input.txt")
          slurp
-         brackets
+         u/brackets
          clojure.edn/read-string
          input->cycle)
     (fish-count 256))

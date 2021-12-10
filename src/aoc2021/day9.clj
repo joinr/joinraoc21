@@ -10,8 +10,12 @@
    9899965678")
 
 ;;0 always low point, 9 always high point.
+
+
 ;;could've done this with vectors, but assumed speed and density
-;;would be useful.  meh, in retrospect it was premature....
+;;would be useful.  meh, in retrospect it was premature optimization.
+;;Probably stick with vectors next time; this is well within bounds of
+;;persistent structures.  A lot of the primitive stuff is not necessary.
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
