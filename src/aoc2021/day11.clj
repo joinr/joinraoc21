@@ -22,19 +22,6 @@
 19991
 11111")
 
-;;We can do this in o(n) every step.
-;;if we have to sample every entry to determine flashes.
-;;if we keep track of 9's in the graph, we know where the
-;;flashes will occur.
-
-;;These provide known roots ofr the flashing components.
-
-;;At the beginning of the next step, we update the 9's to 0.
-;;That tells us where to start looking at neighbors.
-;;we then visit neighbors and increment them.
-
-;;we'll just use vectors for now since easy.
-;;could reuse grid, but meh.
 
 (defn neighbors [x y]
   [[(inc x) y] ;;r
@@ -65,15 +52,6 @@
              [(xy->idx w h x y) [x y] nebs]))
          (reduce (fn [acc [n xy nebs]]
                    (assoc acc n {:coord xy :neighbors nebs})) {})))
-
-#_(defn get-entry
-  [grid x y]
-  (as-> grid m
-    (m y)
-    (m x)))
-
-#_(defn set-entry [grid x y v]
-  (assoc-in grid [x y] v))
 
 (defn txt->state
   ([w txt]
