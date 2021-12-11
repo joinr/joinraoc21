@@ -20,33 +20,6 @@
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 
-(definterface I2D
-  (getEntry ^long [^long r ^long c])
-  (setEntry [^long r ^long c ^long v]))
-
-;;redundant but meh.
-(defn get-entry ^long [^I2D gr ^long x ^long y]
-  (.getEntry gr x y))
-
-(defn set-entry [^I2D gr ^long x ^long y ^long v]
-  (.setEntry gr x y v))
-
-;;no bounds checking lol.
-(defrecord grid [^long w ^long h ^longs entries]
-  I2D
-  (getEntry ^long [this ^long x ^long y]
-    (aget entries (+ (* y w) x)))
-  (setEntry ^long [this ^long x ^long y ^long v]
-    (do (aset entries (+ (* y w) x) v)
-        this)))
-
-(defn new-grid
-  (^grid [^long w ^long h xs]
-   (let [entries (if xs (long-array xs)
-                     (long-array (* w h)))]
-     (->grid w h entries)))
-  (^grid [w h] (new-grid w h nil)))
-
 (defn txt->grid [txt]
   (let [rows (for [ln (-> txt
                           clojure.string/split-lines)]
@@ -55,23 +28,17 @@
                    clojure.edn/read-string))
         w     (count (first rows))
         h     (count rows)]
-    (new-grid w h (apply concat rows))))
-
-(defn valid-entry ^long [^grid g ^long x ^long y ^long not-found]
-  (if (and (> y -1) (< y (.-h g))
-           (> x -1) (< x (.-w g)))
-    (get-entry g x y)
-    not-found))
+    (u/new-grid w h (apply concat rows))))
 
 (defn scan-lows [{:keys [w h] :as ^grid g}]
-  (let [known  (new-grid w h)
+  (let [known  (u/new-grid w h)
         low?   (fn [^long x ^long y ^long v]
                  (or (zero?  v)
                      (and (< v 9)
-                          (< v ^long (valid-entry g (dec x) y Long/MAX_VALUE)) ;w
-                          (< v ^long (valid-entry g (inc x) y Long/MAX_VALUE)) ;e
-                          (< v ^long (valid-entry g x  (inc y) Long/MAX_VALUE));s
-                          (< v ^long (valid-entry g x (dec y) Long/MAX_VALUE)) ;n
+                          (< v ^long (u/valid-entry g (dec x) y Long/MAX_VALUE)) ;w
+                          (< v ^long (u/valid-entry g (inc x) y Long/MAX_VALUE)) ;e
+                          (< v ^long (u/valid-entry g x  (inc y) Long/MAX_VALUE));s
+                          (< v ^long (u/valid-entry g x (dec y) Long/MAX_VALUE)) ;n
                           )))]
     (dotimes [x w]
       (dotimes [y h]
@@ -106,7 +73,7 @@
         points (vec (for [x (range w) y (range h)  :when (pos? (get-entry lows x y))]
                       [x y]))
         nth-grid (fn [x y]
-                   (let [res (valid-entry g x y Long/MAX_VALUE)]
+                   (let [res (u/valid-entry g x y Long/MAX_VALUE)]
                      (when (< res Long/MAX_VALUE)
                        res)))
         neighbors (fn [x y] ;;would be faster to have a mutable focus but meh.
