@@ -77,7 +77,7 @@
    ])
 
 (defn idx->xy [w h n]
-  [(quot n h) (rem n w)])
+  [(rem n w) (quot n h)])
 
 (defn xy->idx [w h x y]
   (+ x (* y h)))
