@@ -108,17 +108,15 @@ CN -> C")
   (let [deltas
         (reduce-kv (fn delts  [deltas k n]
                      (if (pos? n)
-                       (let [[l r v] (rules k)
-                             _ (println [k l r v])]
+                       (let [[l r v] (rules k)]
                          (-> deltas
-                             (assoc  k (- n))
+                             (update  k #(- (or % 0) n))
                              (update l #(+ (or % 0) n))
                              (update r #(+ (or % 0) n))
                              (update-in [:totals v] #(+ (or % 0) n))))
                        deltas))
                       {}
                       parts)
-        _ (println deltas)
         new-parts (reduce-kv (fn ps [acc k v]
                                (assoc acc k (+ (acc k) v)))
                              parts (dissoc deltas :totals)) 
@@ -131,14 +129,28 @@ CN -> C")
   (if (string? st)
     (->> (partition 2 1 st)
          (map #(apply str %))
-         (frequencies))
+         (frequencies)
+         (sort))
     (->> st
          :parts
          (reduce-kv (fn [acc k v]
-                      (if (pos? v) (assoc acc k v) acc)) {}))))
+                      (if (pos? v) (assoc acc k v) acc)) {})
+         (sort))))
+
+(defn score-state [{:keys [totals]}]
+  (let [[[least lv] [most mv]] (->> (sort-by val totals)
+                                    ((juxt first last)))]
+    (- mv lv)))
 
 (defn nth-parts [n state]
   (->> state
        (iterate update-parts)
        (take (inc n))
        last))
+
+;;solve 14.2 !
+(->> (io/resource "day14input.txt")
+     slurp
+     txt->parts
+     (nth-parts 40)
+     score-state)
