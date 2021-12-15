@@ -56,3 +56,42 @@
            (> x -1) (< x (.-w g)))
     (get-entry g x y)
     not-found))
+
+
+(defn neighbors [x y]
+  [[(inc x) y] ;;r
+   [(dec x) y] ;;l
+   [x (inc y)] ;;u
+   [x (dec y)] ;;d
+   [(inc x) (inc y)] ;;ur
+   [(dec x) (inc y)] ;;ul
+   [(dec x) (dec y)] ;;dl
+   [(inc x) (dec y)] ;;dr
+   ])
+
+(defn neighbors4 [x y]
+  [[(inc x) y] ;;r
+   [(dec x) y] ;;l
+   [x (inc y)] ;;u
+   [x (dec y)] ;;d
+   ])
+
+(defn idx->xy [w h n]
+  [(quot n h) (rem n w)])
+
+(defn xy->idx [w h x y]
+  (+ x (* y h)))
+
+(defn adjacency [w h & {:keys [neighbors-fn] :or
+                        {neighbors-fn neighbors}}]
+  (->> (for [x (range w)
+             y (range h)]
+         (let [nebs (->> (neighbors-fn x y)
+                         (filterv (fn [[x y]]
+                                    (and (>= x 0) (< x w)
+                                         (>= y 0) (< y h))))
+                         (map (fn [[x y]]
+                                (xy->idx w h x y))))]
+           [(xy->idx w h x y) [x y] nebs]))
+       (reduce (fn [acc [n xy nebs]]
+                 (assoc acc n {:coord xy :neighbors nebs})) {})))
