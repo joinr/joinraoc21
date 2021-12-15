@@ -95,3 +95,64 @@
            [(xy->idx w h x y) [x y] nebs]))
        (reduce (fn [acc [n xy nebs]]
                  (assoc acc n {:coord xy :neighbors nebs})) {})))
+
+;;minimally inspired by spork.cljgraph
+(defprotocol IFringe
+  (peek-fringe [fr])
+  (pop-fringe  [fr])
+  (push-fringe [fr w nd]))
+
+;;original lame priorityq impl.
+(defrecord minpq [entries]
+  IFringe
+  (peek-fringe [fr]
+    (when-let [v (first entries)]
+      (v 1)))
+  (pop-fringe  [fr]
+    (if-let [k (first entries)]
+      (minpq. (disj entries k))
+      fr))
+  (push-fringe [fr w nd]
+    (minpq. (conj entries [w nd]))))
+
+(defn min-pq [& xs]
+  (minpq. (into (sorted-set-by
+                 (fn [l r]
+                   (let [res (compare (l 0) (r 0))]
+                     (if-not (zero? res) res
+                             (compare (l 1) (r 1)))))) xs)))
+
+;;playing with indexed priority queue to see if we do better.
+(defrecord minidxq [entries known]
+  IFringe
+  (peek-fringe [fr]
+    (when-let [v (first (vals entries))]
+      (first v)))
+  (pop-fringe  [fr]
+    (if-let [kv (first entries)]
+      (let [k  (key kv)
+            xs (val kv)
+            v (first xs)]
+        (minidxq. (if (> (count xs) 1)
+                 (assoc  entries k (disj xs v))
+                 (dissoc entries k))
+               (dissoc known v)))
+        fr))
+  (push-fringe [fr k v]
+    (if-let [oldk (known v)]
+      (let [old     (entries oldk)]
+        (minidxq. (-> (if (> (count old) 1)
+                     (assoc entries oldk (disj old v))
+                     (dissoc entries oldk))
+                   (update k #(conj (or % #{}) v)))
+               (assoc known v k)))
+      (minidxq. (update entries k #(conj (or % #{}) v))
+             (assoc known v k)))))
+
+(defn min-indexed-pq [& xs]
+  (let [groups (group-by first xs)
+        known (reduce (fn [acc [w k]]
+                        (assoc acc k w)) {} xs)]
+    (minidxq. (into (sorted-map) (for [[k v] groups]
+                                [k (set (map second v))]))
+           known)))

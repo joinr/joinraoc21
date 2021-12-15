@@ -19,12 +19,7 @@
        clojure.string/split-lines
        (mapv #(u/read-as-vector (clojure.string/join " " %)))))
 
-(defn min-pq [& xs]
-  (into (sorted-set-by (fn [l r]
-                         (let [res (compare (l 0) (r 0))]
-                           (if-not (zero? res) res
-                                   (compare (l 1) (r 1)))))) xs))
-
+#_#_
 (defn peek-min [pq]
   (when-let [v (first pq)]
     (v 1)))
@@ -39,65 +34,75 @@
     (conj x y)
     (conj #{x} y)))
 
-(defn relax [{:keys [spt dist fringe] :as state} source sink w]
-  (let [dfrom (or (dist source) (throw (ex-info "unknown weight!" {:in dist :source source})))
-        wnew  (+ ^long dfrom ^long w)]
-    (if-let [^long wold (dist sink)] ;;known path.
-      (cond (< wnew wold) ;;shorter path
-            {:spt    (assoc spt sink source)
-             :dist   (assoc dist sink wnew)
-             :fringe (conj fringe [wnew sink])}
-            (= wnew wold) ;;equal path
-            {:spt  (update spt sink multipath source)
-             :dist dist
-             :fringe fringe}
-            :else ;;no change
-            state)
-      ;;new path
-      {:spt    (assoc spt  sink source)
-       :dist   (assoc dist sink wnew)
-       :fringe (conj fringe [wnew sink])})))
+(defn relax
+  ([{:keys [spt dist fringe] :as state} source sink w hw]
+   (let [dfrom (or (dist source) (throw (ex-info "unknown weight!" {:in dist :source source})))
+         wnew  (+ ^long dfrom ^long w)]
+     (if-let [^long wold (dist sink)] ;;known path.
+       (cond (< wnew wold) ;;shorter path
+             {:spt    (assoc spt sink source)
+              :dist   (assoc dist sink wnew)
+              :fringe (u/push-fringe fringe (+  wnew ^long hw) sink)}
+             (= wnew wold) ;;equal path
+             {:spt  (update spt sink multipath source)
+              :dist dist
+              :fringe fringe}
+             :else ;;no change
+             state)
+       ;;new path
+       {:spt    (assoc spt  sink source)
+        :dist   (assoc dist sink wnew)
+        :fringe (u/push-fringe fringe (+ wnew ^long hw) sink)})))
+  ([state source sink w] (relax state source sink w 0)))
 
-(defn best-first [gr from to]
+(defn best-first [gr from to & {:keys [make-fringe]
+                                :or {make-fringe u/min-pq}}]
   (let [sinks (gr :sinks)
         nodes (gr :nodes)
         weightf (fn [nd]
                   ((nodes nd) :risk))
         init {:spt  {from from}
               :dist {from (weightf from)}
-              :fringe (min-pq [0 from])}]
+              :fringe (make-fringe [0 from])}]
     (loop [{:keys [spt dist fringe] :as state} init]
-      (if-let [source (peek-min fringe)]
+      (if-let [source (u/peek-fringe fringe)]
         (if (= source to)
           (assoc state :found-path [from to])
           (let [neighbors  (sinks source)
                 next-state (reduce-kv (fn [acc sink w]
                                         (relax acc source sink w))
-                                      (update state :fringe pop-min)
+                                      (update state :fringe u/pop-fringe)
                                       (sinks source))]
             (recur next-state)))
         state))))
 
-#_
-(defn a* [gr from to h]
+(defn a* [gr from to h & {:keys [make-fringe]
+                          :or {make-fringe u/min-pq}}]
   (let [sinks (gr :sinks)
         nodes (gr :nodes)
         weightf (fn [nd]
                   ((nodes nd) :risk))
         init {:spt  {from from}
               :dist {from (weightf from)}
-              :fringe (min-pq [0 from])}]
+              :fringe (make-fringe [0 from])}]
     (loop [{:keys [spt dist fringe] :as state} init]
-      (if-let [source (peek-min fringe)]
+      (if-let [source (u/peek-fringe fringe)]
         (if (= source to)
           (assoc state :found-path [from to])
           (let [neighbors  (sinks source)
                 next-state (reduce-kv (fn [acc sink w]
-                                        (relax acc source sink w))
-                                      (update state :fringe pop-min)
+                                        (let [hw (h sink to)]
+                                          (relax acc source sink w hw)))
+                                      (update state :fringe u/pop-fringe)
                                       (sinks source))]
             (recur next-state)))
         state))))
+
+(defn manhattan [w h from to]
+  (let [xy1 (u/idx->xy w h from)
+        xy2 (u/idx->xy w h to)]
+    (+ (Math/abs (- ^long (xy2 0) ^long (xy1 0)))
+       (Math/abs (- ^long (xy2 1) ^long (xy1 1))))))
 
 ;;reuse day 11 graph helpers, now in util.  could make the graph implicit, but meh.
 (defn entries->graph [entries w h & {:keys [neighbors-fn] :or {neighbors-fn u/neighbors4}}]
@@ -253,3 +258,6 @@
 ;;ugh, completes in 2s.  Should use A* to prune better,
 ;;or an indexed pq.  Could also optimize the representation
 ;;using primitive arithmetic.
+
+;;indexed priority queue isn't a big help here, at least the non-optimized
+;;implementation.  very curious why a* isn't pruning more.
