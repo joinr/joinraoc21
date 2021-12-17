@@ -55,8 +55,9 @@
         :fringe (u/push-fringe fringe (+ wnew ^long hw) sink)})))
   ([state source sink w] (relax state source sink w 0)))
 
-(defn best-first [gr from to & {:keys [make-fringe]
-                                :or {make-fringe u/min-pq}}]
+(defn best-first [gr from to & {:keys [make-fringe on-visit]
+                                :or {make-fringe u/min-pq
+                                     on-visit identity}}]
   (let [sinks (gr :sinks)
         nodes (gr :nodes)
         weightf (fn [nd]
@@ -68,7 +69,8 @@
       (if-let [source (u/peek-fringe fringe)]
         (if (= source to)
           (assoc state :found-path [from to])
-          (let [neighbors  (sinks source)
+          (let [_ (on-visit source)
+                neighbors  (sinks source)
                 next-state (reduce-kv (fn [acc sink w]
                                         (relax acc source sink w))
                                       (update state :fringe u/pop-fringe)
@@ -76,8 +78,9 @@
             (recur next-state)))
         state))))
 
-(defn a* [gr from to h & {:keys [make-fringe]
-                          :or {make-fringe u/min-pq}}]
+(defn a* [gr from to h & {:keys [make-fringe on-visit]
+                          :or {make-fringe u/min-pq
+                               on-visit identity}}]
   (let [sinks (gr :sinks)
         nodes (gr :nodes)
         weightf (fn [nd]
@@ -89,7 +92,8 @@
       (if-let [source (u/peek-fringe fringe)]
         (if (= source to)
           (assoc state :found-path [from to])
-          (let [neighbors  (sinks source)
+          (let [_ (on-visit source)
+                neighbors  (sinks source)
                 next-state (reduce-kv (fn [acc sink w]
                                         (let [hw (h sink to)]
                                           (relax acc source sink w hw)))
