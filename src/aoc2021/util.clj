@@ -1,7 +1,18 @@
 (ns aoc2021.util)
 
+
+(defn enclose [s char]
+  (case char
+    \[ (str \[ s \])
+    \{ (str \{ s \})
+    \( (str \( s \))
+    (str char s char)))
+
 (defn brackets [s]
-  (str "[" s "]"))
+  (enclose s \[))
+
+(defn braces [s]
+  (enclose s \{))
 
 (defn read-as-vector [txt]
   (-> txt
