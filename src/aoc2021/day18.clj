@@ -42,8 +42,10 @@
                       (find-explode (conj path 1) (inc depth) (lr 1)))))
         :else nil))
   ([lr]
-   (when-let [res (find-explode '[] 0 lr)]
-     @res)))
+   (or (when-let [known (-> lr meta :explode)]
+         [known (get-in lr known)])
+       (when-let [res (find-explode '[] 0 lr)]
+         @res))))
 
 ;;go up until we can go left, then go right until we can't anymore.
 (defn left-sibling [tr path]
@@ -111,13 +113,15 @@
 
 (defn explode-pass [tr]
   (when-let [[path [l r]] (find-explode tr)]
-    (let [parent (pop path)
+    (let [tr (with-meta tr {})
+          parent (pop path)
           lpath  (left-sibling  tr path)
-          lv     (when lpath
-                   (+ (get-in tr lpath) l))
+          lv     (when lpath (+ (get-in tr lpath) l))
           rpath  (right-sibling tr path)
-          rv     (when rpath
-                   (+ (get-in tr rpath) r))]
+          rv     (when rpath (+ (get-in tr rpath) r))
+          _  (u/log {:exploding path :from [l r]
+                       :lpath lpath :lv lv
+                       :rpath rpath :rv rv})]
       (-> tr
           (assoc-in  path 0)
           (assoc-in? lpath lv)
@@ -131,6 +135,40 @@
         r (if (zero? k) l (inc l))]
     [l r]))
 
+;;instead of relying on invalid cache info, we need to
+;;traverse and find splits manually.  This guarantees finding
+;;the first split.  -AAARGH -  If a split produces another possible
+;;split, we have to process it immediately to preserve order of operations!
+(defn naive-split
+  ([path depth lr did-split]
+   (if (number? lr)
+     (if (> lr 9 )
+       ;;split.
+       (let [sp (split-num lr)
+             _  (reset! did-split true)
+             _ (u/log [:splitting path lr sp])]
+         (cond (>= depth 4) ;;going to cause explode.
+               (with-meta sp {:explode path})
+               (or (> (sp 0) 9) (> (sp 1) 9))
+                 (naive-split path depth sp did-split)
+               :else  sp))
+       lr)
+     (let [[l r] lr
+           lres (naive-split (conj path 0) (inc depth) l did-split)
+           ]
+       (if-let [p (-> lres meta :explode)]
+         (with-meta [lres r] {:explode p})
+         (let [rres (naive-split (conj path 1) (inc depth) r did-split)
+               ]
+           (if-let [p (-> rres meta :explode)]
+             (with-meta [lres rres] {:explode p})
+             [lres rres]))))))
+  ([tr]
+   (let [did-split (atom nil)
+         res       (naive-split [] 0 tr did-split)]
+     (when @did-split
+       res))))
+
 ;;looking at input, it seems we have no addable numbers with splits or explosions.
 ;;they are all reduced.  so we can keep track of splits, which can only be caused
 ;;by addition->explosion.
@@ -138,7 +176,9 @@
 ;;we have to explode a number if splitting makes it > 4 nested though.
 ;;so one way to do it is to have split-pass use explode-pass.
 (defn split-pass
-  ([tr splits]
+  [tr]
+  (naive-split tr)
+  #_([tr splits]
    (loop [acc       tr
           remaining splits]
      (if-let [p (first (keys remaining))]
@@ -146,32 +186,58 @@
           (let [v2        (split-num v)
                 remaining (dissoc remaining p)
                 nxt       (assoc-in acc p v2)
-                _ (println [:split p v v2])]
+                _ (u/log [:split p v v2])]
             (if (= (count p) 4) ;;gonna cause an explosion!
-              (do (println [:splode!])
+              (do (u/log [:splode!])
                   (vary-meta nxt #(assoc % :splits remaining)))
               (recur nxt remaining)))
           ;;path exploded away.
           (recur acc (dissoc remaining p)))
        (vary-meta acc #(dissoc % :splits)))))
-  ([tr]
+  #_([tr]
     (when-let [splits (-> tr meta :splits)]
       (split-pass tr splits))))
-
-(defn naive-split [tr]
-  ())
-
 
 (defn add [l r]
   (->> [l r]
        (iterate (fn [acc]
+                  (u/log acc)
                   (if-let [res (explode-pass acc)]
-                    (do (println [:explode res])
+                    (do (u/log [:explode res])
                         res) ;;no explodes, look for splits.
                     (when-let [splitted (split-pass acc)]
+                      (do (u/log [:split splitted]))
                       splitted))))
        (take-while identity)
        last))
 
 (defn add-them [xs]
   (reduce add xs))
+
+(defn magnitude [lr]
+  (if (number? lr)
+    lr
+    (let [[l r] lr]
+      (+ (* 3 (magnitude l))
+         (* 2 (magnitude r))))))
+
+;;day 18.1
+(-> (io/resource "day18input.txt")
+    slurp
+    u/read-as-vector
+    add-them
+    magnitude)
+
+;;day 18.2
+
+(defn largest-sum [xs]
+  (reduce max (for [i (range (count xs))
+                    j (range (count xs))
+                    :when (not= i j)]
+                (max (magnitude (add (xs i) (xs j)))
+                     (magnitude (add (xs j) (xs i)))))))
+
+(->> (io/resaouce "day18input.txt")
+     slurp
+     u/read-as-vector
+     largest-sum)
