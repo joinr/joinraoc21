@@ -167,3 +167,10 @@
     (minidxq. (into (sorted-map) (for [[k v] groups]
                                 [k (set (map second v))]))
            known)))
+
+
+(defn float= [l r]
+  (let [diff (- l r)]
+    (if (< (Math/abs diff) 10E-6)
+      true
+      false)))
