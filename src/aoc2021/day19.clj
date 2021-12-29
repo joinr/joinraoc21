@@ -169,7 +169,7 @@
 
 (defn all-pairs [[scanner points]]
   (for [i (range (count points))
-        j (range (count points))
+        j (range i (count points))
         :when (not= i j)]
     (let [l (points i) r (points j)]
       [l r (distance l r)])))
@@ -191,14 +191,13 @@
                       :let [left (ls i)
                             right (rs j)]
                       :when (u/float= (left 2) (right 2))]
-                  {l left r right})]
-             ))
-         (filter (comp seq second)))))
+                  {l left r right})]))
+         (filter (comp seq second))))s)
 
-
-(defn unique-segments [m l r]
-  (->> (candidates m l r)
-       (filter (fn [[k v]] (= (count v) 1)))))
+;;modify api to allow us to pass in candidates.
+(defn unique-segments
+  ([xs]    (->> xs (filter (fn [[k v]] (= (count v) 1)))))
+  ([m l r] (unique-segments (candidates m l r))))
 
 ;;determining orientations.
 ;;they lead us to believe it's natural to model as
@@ -346,6 +345,7 @@
           #_[(- x dx) (- y dy) (- z dz)])
         xs))
 
+#_
 (defn common-segs [{:keys [lefts rights]}]
   (let [[l1 l2] lefts
         [r1 r2] rights
@@ -360,14 +360,34 @@
     {:left  [(is-not cl l1) cl (is-not cl l2)]
      :right [(is-not cr r1) cr (is-not cr r2)]}))
 
+;;define common point as the closest to the origin.
+;;so long as we have 2 unique segments, we're okay.
+;;even if we don't have 2 unique segments, we can still orient
+;;off of the closest segments.  If the closest point to the origin
+;;is the same in each case, expect our frame to be]
+
+(defn common-segs [{:keys [lefts rights]}]
+  (let [[sl1 sl2] (take 2 lefts)
+        [sr1 sr2] (take 2 rights)]
+    (when (and sl1 sl2 sr1 sr2)
+      (let [dist (fn [p] (distance [0 0 0] p))
+            [l1 cl]   (sort-by dist [(sl1 0) (sl1 1)])
+            [l2 l3]   (sort-by dist [(sl2 0) (sl2 1)])
+            l2        (if (= l2 cl) l3 l2)
+            [r1 cr]   (sort-by dist [(sr1 0) (sr1 1)])
+            [r2 r3]   (sort-by dist [(sr2 0) (sr2 1)])
+            r2        (if (= r2 cr) r3 r2)
+            ]
+        {:left  [l1 cl l2]
+         :right [r1 cr r2]}))))
+
 (defn orient [ls rs]
   (let [cls (translate (nth ls 1) ls)
         crs (translate (nth rs 1) rs)
-        tx  (mapv +    (nth ls 1) (nth rs 1))
-        ;_ (println [tx cls crs])
-        ]
+        tx  (mapv +    (nth ls 1) (nth rs 1))]
     (->>  (for [k (keys common-transforms)]
-            (let [[l c r :as res] (map #(transform k %) cls)]
+            (let [[l c r :as res] (map #(transform k %) cls)
+                  _ (println [:checking k])]
               (when (and (v= l (crs 0)) (v= r (crs 2)))
                 (println [:oriented k res])
                 [k res])))
@@ -383,7 +403,9 @@
         p1         (first common)
         p1x        (v+ (invert orientation p1) tx)
         p1y        (v+ p1 ty)
-        position-y (v- p1x (transform orientation p1y))]
+        position-y (v- p1x (transform orientation p1y))
+        _ (println [p1x (transform orientation p1y)])
+        ]
     (with-meta
     {;;coordinates in xs and ys's mutual fixed coordinate system that
      ;;intersect
@@ -392,17 +414,31 @@
      :common-clean (mapv #(v+ (mapv long (invert orientation %)) tx) common)
      ;;the location of ys origin (the scanner).
      ;;translate to ty
-     :location position-y}
+     :location position-y
+     :orientation orientation}
       {:lefts  projected
        :rights targets})))
 
 ;;compare a pair of scanners, treating l as the base coordinate system for both.
+;;we can just look at all common points and see if we find a working orientation
+;;that provides a match.  We typically want the smallest unique constellation to look
+;;at (a wedge).  The brute force approach is to look through all points.  
+
 (defn compare-scans [m l r]
   (let [segsl (m l)
         segsr (m r)]
-    (when-let [us (uniques segsl segsr)]
-      (let [{:keys [left right] :as common} (common-segs (us))
-            orientation (orient left right)
-            cl (nth left 1)
+    (when-let [us (uniques m l r)]
+      (let [common (common-segs us)
+            {:keys [left right] } common
+            [orientation _]  (orient left right)
+            cl (nth left  1)
             cr (nth right 1)]
         (project  cl cr orientation segsl segsr)))))
+
+;;a little rough.  homoegnous coordinates would be better, but meh.
+(defn unproject
+  ([orientation position]
+   (let [mat (common-inversions orientation)]
+     (fn [coord]
+       (v+ (vec (mmult mat coord)) position))))
+  ([orientation position coord] ((unproject orientation position) coord)))
